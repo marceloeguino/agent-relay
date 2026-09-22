@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-relay-api
+  labels:
+    app: agent-relay-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agent-relay-api
+  template:
+    metadata:
+      labels:
+        app: agent-relay-api
+    spec:
+      containers:
+        - name: api
+          # Built locally and loaded into kind with `kind load docker-image`
+          # -- never pulled from a registry, so imagePullPolicy must not be
+          # the default "Always" (kind has no route to Docker Hub either).
+          image: agent-relay:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: agent-relay-postgres
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-relay-api
+spec:
+  selector:
+    app: agent-relay-api
+  ports:
+    - port: 8000
+      targetPort: 8000

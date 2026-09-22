@@ -1,0 +1,10 @@
+# kind cluster config: pins the API server to a fixed, predictable port
+# (127.0.0.1:6443) instead of a random one, so the kubeconfig used by CI/act
+# doesn't change between cluster (re)creations.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+networking:
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: 6443

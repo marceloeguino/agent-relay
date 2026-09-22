@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app: agent-relay-postgres
+spec:
+  replicas: 1
+  strategy:
+    # Postgres owns a single ReadWriteOnce volume, so a rolling update that
+    # tries to start the new pod before the old one releases the volume
+    # would hang. Recreate tears the old pod down first.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: agent-relay-postgres
+  template:
+    metadata:
+      labels:
+        app: agent-relay-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: agent-relay-postgres
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              # Postgres wants an empty dir to initialize into; without this
+              # subPath, the ext4 lost+found dir some CSI drivers create at
+              # the volume root makes initdb refuse to start.
+              subPath: pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "agent_relay", "-d", "agent_relay"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "agent_relay", "-d", "agent_relay"]
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: agent-relay-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  # Service name "postgres" is the in-cluster DNS hostname the API uses to
+  # reach the database (see RELAY_DATABASE_URL in postgres-secret.yaml).
+  name: postgres
+spec:
+  selector:
+    app: agent-relay-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
