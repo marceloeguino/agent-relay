@@ -56,6 +56,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure kind and kubectl are available
+        run: |
+          if ! command -v kubectl >/dev/null; then
+            echo "Installing kubectl..."
+            curl -fsSLo /tmp/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+          fi
+          if ! command -v kind >/dev/null; then
+            echo "Installing kind..."
+            curl -fsSLo /tmp/kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+            install -m 0755 /tmp/kind /usr/local/bin/kind
+          fi
+          kubectl version --client
+          kind version
+
       - name: Compute a unique image tag
         id: tag
         run: echo "tag=${GITHUB_SHA::12}-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
