@@ -97,18 +97,32 @@ the container itself, not your Mac, so the kubeconfig needs
 `host.docker.internal` instead.
 
 ```bash
-# One-time: a kubeconfig act's container can actually reach
+# One-time: a kubeconfig act's container can actually reach.
+# - host.docker.internal instead of 127.0.0.1, since 127.0.0.1 inside the
+#   act container means the container itself, not your Mac.
+# - strip the embedded CA data and skip TLS verification, since the kind
+#   API server's certificate is only valid for its in-cluster names
+#   (kubernetes.default, localhost, ...), not host.docker.internal.
 kind get kubeconfig --name agent-relay \
-  | sed 's/127.0.0.1/host.docker.internal/' > /tmp/kind-kubeconfig-for-act.yaml
+  | sed 's/127.0.0.1/host.docker.internal/; /certificate-authority-data/d' \
+  > /tmp/kind-kubeconfig-for-act.yaml
+
+kubectl --kubeconfig /tmp/kind-kubeconfig-for-act.yaml \
+  config set-cluster kind-agent-relay --insecure-skip-tls-verify=true
 
 act push \
-  --container-options "-v /var/run/docker.sock:/var/run/docker.sock -v /tmp/kind-kubeconfig-for-act.yaml:/root/.kube/config" \
+  --container-options "-v /tmp/kind-kubeconfig-for-act.yaml:/root/.kube/config" \
   --container-architecture linux/amd64
 ```
 
-If `act` can't find `kind`/`kubectl` inside its runner image, use a fuller
-image (`-P ubuntu-latest=catthehacker/ubuntu:full-latest`) or install them
-in the job via a setup step — the default `act` runner image is minimal.
+`act`'s own container already mounts your Docker socket automatically on
+Docker Desktop for Mac, so don't also pass
+`-v /var/run/docker.sock:/var/run/docker.sock` yourself — that collides
+with act's own mount and fails with "Duplicate mount point".
+
+The CI workflow installs `kind`/`kubectl` itself in a setup step (the
+default `act`/GitHub-hosted runner image ships neither), so nothing extra
+is needed there.
 
 Watch the run: the `test` job should pass (starter tests + the Postgres
 integration test), then `build-and-deploy` builds a uniquely-tagged image,
