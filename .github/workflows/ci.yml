@@ -82,14 +82,12 @@ jobs:
         # `kind load docker-image` intermittently fails with "failed to
         # detect containerd snapshotter" when driven via `docker exec` from
         # inside another container (known kind flakiness, e.g.
-        # kubernetes-sigs/kind#3130). Importing the image directly with
-        # `ctr` sidesteps kind's own (buggy) snapshotter probe.
+        # kubernetes-sigs/kind#3130). Streaming the image straight into
+        # `ctr` over stdin sidesteps both that probe and any intermediate
+        # temp-file path quirks from `docker cp` into the node container.
         run: |
-          docker save "${IMAGE_NAME}:${{ steps.tag.outputs.tag }}" -o /tmp/agent-relay-image.tar
-          docker cp /tmp/agent-relay-image.tar "${KIND_CLUSTER}-control-plane:/tmp/agent-relay-image.tar"
-          docker exec "${KIND_CLUSTER}-control-plane" ctr --namespace=k8s.io images import /tmp/agent-relay-image.tar
-          docker exec "${KIND_CLUSTER}-control-plane" rm -f /tmp/agent-relay-image.tar
-          rm -f /tmp/agent-relay-image.tar
+          docker save "${IMAGE_NAME}:${{ steps.tag.outputs.tag }}" \
+            | docker exec -i "${KIND_CLUSTER}-control-plane" ctr --namespace=k8s.io images import -
 
       - name: Apply Kubernetes manifests
         run: |
